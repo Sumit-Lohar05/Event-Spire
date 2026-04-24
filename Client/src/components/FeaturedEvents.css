@@ -1,0 +1,106 @@
+.featured-section {
+    padding: 100px 80px;
+    background: #0a0a0a;
+    text-align: center;
+}
+.section-header h1{
+    font-size: 3rem;
+    color: #fff;
+    margin: 10px;
+}
+.section-header p{
+    font-size: 1rem;
+    color: #ccc;
+    margin-bottom: 10px;
+}
+.events-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 30px;
+    margin-top: 50px;
+}
+.no-results {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 40px;
+    color: #9ca3af;
+    font-size: 1.2rem;
+}
+
+.view-all-container {
+    margin-top: 60px;
+    display: flex;
+    justify-content: center;
+}
+
+.btn-view-all {
+    background: transparent;
+    color: white;
+    border: 2px solid #6366f1; /* Matches your brand indigo */
+    padding: 14px 40px;
+    border-radius: 30px;
+    font-size: 1.1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.btn-view-all:hover {
+    background: linear-gradient(to right, #646cff, #8a2be2); /* Matches your "Get Started" button */
+    border-color: transparent;
+    transform: translateY(-3px);
+    box-shadow: 0 10px 20px rgba(99, 102, 241, 0.3);
+}
+
+/* Responsive Styles */
+/* Responsive Styles */
+@media (max-width: 768px) {
+    .featured-section {
+        padding: 60px 20px; 
+    }
+
+    .section-header h1 {
+        font-size: 2rem; 
+        margin-bottom: 10px;
+        line-height: 1.2; /* Better readability for wrapped titles */
+    }
+
+    .section-header p {
+        font-size: 0.95rem;
+        padding: 0 10px;
+        margin-bottom: 20px;
+    }
+
+    .events-grid {
+        display: flex; /* Using flex-direction: column is often more reliable for centering single cards */
+        flex-direction: column;
+        align-items: center; 
+        gap: 25px; /* Slightly tighter gap for a cleaner mobile list */
+        margin-top: 30px;
+        padding: 0;
+    }
+
+    .event-card {
+        width: 100%;
+        max-width: 380px;
+        margin: 0 auto; 
+    }
+    .view-all-container {
+        margin-top: 40px;
+    }
+    
+    .btn-view-all {
+        width: 100%;
+        max-width: 300px;
+    }
+}
+
+@media (max-width: 320px) {
+    .featured-section {
+        padding: 40px 10px;
+    }
+    
+    .section-header h1 {
+        font-size: 1.6rem;
+    }
+}

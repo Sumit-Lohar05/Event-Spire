@@ -1,0 +1,10 @@
+html, body {
+  scroll-behavior: smooth;
+  margin: 0;
+    padding: 0;
+    width: 100%;
+    /* This prevents small horizontal shifts that cause white gaps */
+    overflow-x: hidden; 
+    /* Set a fallback background color so you never see white */
+    background-color: #0a0a0a;
+}

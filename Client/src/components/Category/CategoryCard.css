@@ -1,0 +1,40 @@
+.category-card {
+    background: #121212;
+    border-radius: 20px;
+    padding: 30px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    border: 1px solid #2a2a2a;
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+.category-card:hover {
+    transform: translateY(-5px);
+    border-color: #333;
+    background: #222;
+}
+.category-icon{
+    width: 50px;
+    height: 50px;
+    border-radius: 12px;
+    align-items: center;
+    display: flex;
+    justify-content: center;
+    margin-bottom: 20px;
+}
+.category-info h3{
+    margin: 0;
+    color: white;
+    font-size: 1.2rem;
+    float: left;
+}
+.category-info h3:hover{
+    color: #6366f1;
+}
+.category-info p{
+    margin: 5px 0 0;
+    color: #71717a;
+    font-size: 0.9rem;
+    float: left;
+}
