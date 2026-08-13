@@ -1,0 +1,219 @@
+.profile-page-container {
+    padding: 120px 20px 60px 20px;
+    max-width: 1000px;
+    margin: 0 auto;
+    min-height: 80vh;
+    color: white;
+}
+
+.profile-header-card {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    -webkit-backdrop-filter: blur(15px);
+    backdrop-filter: blur(15px);
+    border-radius: 20px;
+    padding: 40px;
+    display: flex;
+    align-items: center;
+    gap: 30px;
+    margin-bottom: 30px;
+    position: relative;
+    flex-wrap: wrap;
+}
+
+.profile-avatar-container {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #a855f7 0%, #6366f1 100%);
+    padding: 4px;
+    flex-shrink: 0;
+}
+
+.profile-avatar-img, .profile-avatar-placeholder {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    object-fit: cover;
+    background: #111;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #a855f7;
+}
+
+.profile-header-info {
+    flex: 1;
+}
+
+.profile-header-info h2 {
+    margin: 0 0 5px 0;
+    font-size: 2rem;
+}
+
+.profile-email {
+    color: #9ca3af;
+    margin: 0 0 15px 0;
+}
+
+.profile-social-links {
+    display: flex;
+    gap: 15px;
+}
+
+.profile-social-links a {
+    color: #ccc;
+    transition: color 0.3s ease;
+}
+
+.profile-social-links a:hover {
+    color: #a855f7;
+}
+
+.profile-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.btn-edit, .btn-save, .btn-cancel {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    border-radius: 30px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    border: none;
+}
+
+.btn-edit {
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+.btn-edit:hover { background: rgba(255, 255, 255, 0.2); }
+
+.btn-save { background: #6366f1; color: white; }
+.btn-save:hover { background: #4f46e5; }
+
+.btn-cancel { background: rgba(239, 68, 68, 0.2); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.3); }
+.btn-cancel:hover { background: rgba(239, 68, 68, 0.4); }
+
+/* Tabs */
+.profile-tabs {
+    display: flex;
+    gap: 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    margin-bottom: 30px;
+}
+
+.profile-tabs button {
+    background: transparent;
+    border: none;
+    color: #9ca3af;
+    padding: 10px 5px;
+    font-size: 1.05rem;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.3s ease;
+}
+
+.profile-tabs button.active {
+    color: #a855f7;
+    border-bottom: 2px solid #a855f7;
+}
+
+/* Edit Form */
+.edit-form .form-group {
+    margin-bottom: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.edit-form label {
+    color: #ccc;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.edit-form input, .edit-form textarea {
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: white;
+    padding: 12px;
+    border-radius: 10px;
+    outline: none;
+    font-family: inherit;
+}
+
+.edit-form input:focus, .edit-form textarea:focus { border-color: #a855f7; }
+.form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; }
+
+/* Avatar Upload Styles */
+.avatar-upload-options {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    flex-wrap: wrap;
+}
+.avatar-upload-options input[type="text"] {
+    flex: 1;
+    min-width: 200px;
+}
+.upload-divider {
+    color: #9ca3af;
+    font-size: 0.85rem;
+    font-weight: 700;
+}
+.btn-upload-avatar {
+    display: flex; align-items: center; gap: 8px;
+    background: rgba(168, 85, 247, 0.15);
+    color: #a855f7;
+    border: 1px solid rgba(168, 85, 247, 0.3);
+    padding: 11px 20px;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 0.9rem; font-weight: 500;
+    transition: all 0.3s ease; white-space: nowrap;
+}
+.btn-upload-avatar:hover { background: rgba(168, 85, 247, 0.25); border-color: #a855f7; }
+
+/* Grid */
+.profile-events-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 20px;
+}
+
+.profile-event-card {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 15px;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    transition: transform 0.3s ease;
+}
+.profile-event-card:hover { transform: translateY(-5px); }
+.profile-event-card img { width: 100%; height: 150px; object-fit: cover; }
+.profile-event-info { padding: 15px; }
+.profile-event-info h4 { margin: 0 0 10px 0; font-size: 1.1rem; }
+.profile-event-detail { display: flex; align-items: center; gap: 5px; color: #9ca3af; font-size: 0.85rem; margin-bottom: 5px; }
+.btn-view-event {
+    display: inline-block; margin-top: 10px; color: white; background: #6366f1;
+    padding: 8px 15px; border-radius: 8px; font-size: 0.85rem; text-decoration: none; text-align: center; width: 100%; box-sizing: border-box;
+}
+.btn-view-event:hover { background: #4f46e5; }
+
+.profile-no-events { text-align: center; padding: 40px; color: #9ca3af; }
+.btn-explore { display: inline-block; margin-top: 15px; color: #ffffff; border: 1px solid #a855f7; padding: 10px 20px; border-radius: 30px; text-decoration: none; }
+.btn-explore:hover { background: rgba(168, 85, 247, 0.1); }
+
+@media (max-width: 768px) {
+    .profile-header-card { flex-direction: column; text-align: center; }
+    .profile-social-links, .profile-actions { justify-content: center; }
+    .profile-tabs { overflow-x: auto; white-space: nowrap; }
+}

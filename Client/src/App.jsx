@@ -13,22 +13,29 @@ import Auth from './components/Auth/Auth';
 import HostEventPage from './components/HostEvent/HostEventPage';
 import MyTickets from './components/Tickets/MyTickets';
 import SavedEvents from './pages/SavedEvents';
+import Profile from './pages/Profile';
 
 const Home = ({ events, loading, isLoggedIn, onLoginClick, onDeleteEvent, favourites, onToggleFavorite, currentUser }) => {
     const [searchQuery, setSearchQuery] = useState("");
     const [locationQuery, setLocationQuery] = useState("");
     const [selectedCategory, setSelectedCategory] = useState("All");
+    const [selectedDate, setSelectedDate] = useState("");
+    const [priceFilter, setPriceFilter] = useState("All");
 
     const resetFilters = () =>{
         setSearchQuery("");
         setLocationQuery("");
         setSelectedCategory("All");
+        setSelectedDate("");
+        setPriceFilter("All");
     };
 
     const handleCategorySelect = (category) => {
         setSelectedCategory(category);
         setSearchQuery("");
         setLocationQuery("");
+        setSelectedDate("");
+        setPriceFilter("All");
         const featuredSection = document.getElementById("featured");
         if (featuredSection) {
             featuredSection.scrollIntoView({ behavior: "smooth" });
@@ -41,17 +48,51 @@ const Home = ({ events, loading, isLoggedIn, onLoginClick, onDeleteEvent, favour
             event.category.toLowerCase().includes(searchQuery.toLowerCase());
         const matchLocation = event.location.toLowerCase().includes(locationQuery.toLowerCase());
         const matchCategory = selectedCategory === "All" || event.category === selectedCategory;
-        return matchSearch && matchCategory && matchLocation;
+        
+        // Date filter
+        let matchDate = true;
+        if (selectedDate) {
+            const eventDate = new Date(`${event.date.month} ${event.date.day}, ${event.date.year}`);
+            const filterDate = new Date(selectedDate);
+            matchDate = eventDate.toDateString() === filterDate.toDateString();
+        }
+
+        // Price filter
+        let matchPrice = true;
+        const price = typeof event.price === 'number' ? event.price : 
+                      (event.price === "Free" || !event.price ? 0 : parseInt(event.price.replace(/[^0-9.]/g, '')) || 0);
+        
+        if (priceFilter === "Free") {
+            matchPrice = price === 0;
+        } else if (priceFilter === "Paid") {
+            matchPrice = price > 0;
+        } else if (priceFilter === "Under 500") {
+            matchPrice = price > 0 && price < 500;
+        } else if (priceFilter === "500-1000") {
+            matchPrice = price >= 500 && price <= 1000;
+        } else if (priceFilter === "1000-2000") {
+            matchPrice = price > 1000 && price <= 2000;
+        } else if (priceFilter === "Over 2000") {
+            matchPrice = price > 2000;
+        }
+
+        return matchSearch && matchCategory && matchLocation && matchDate && matchPrice;
     });
     return(
         <>
             <Hero 
                 onSearch={setSearchQuery} 
                 onLocationSearch={setLocationQuery} 
+                onDateSearch={setSelectedDate}
+                onPriceSearch={setPriceFilter}
                 onReset={resetFilters} 
                 searchQuery={searchQuery}
                 locationQuery={locationQuery}
-                isFiltered={searchQuery || locationQuery || selectedCategory !== "All"}
+                dateQuery={selectedDate}
+                priceQuery={priceFilter}
+                isFiltered={searchQuery || locationQuery || selectedCategory !== "All" || selectedDate || priceFilter !== "All"}
+                isLoggedIn={isLoggedIn}
+                onLoginClick={onLoginClick}
             />
             <FeaturedEvents 
                 events={filteredEvents}
@@ -168,7 +209,10 @@ function App() {
         try {
             const response = await fetch('http://localhost:5000/api/events', {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                },
                 body: JSON.stringify({
                     ...newEvent,
                     id: `event-${Date.now()}`,
@@ -193,8 +237,11 @@ function App() {
             try {
                 const response = await fetch(`http://localhost:5000/api/events/${id}`, {
                     method: 'DELETE',
-                    headers: {'Content-Type': 'application/json' },
-                    body: JSON.stringify({ userId: currentUser?.id })
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    },
+                    body: JSON.stringify({ userId: currentUser?.id || currentUser?._id })
                 });
                 if(response.ok){
                     setEvents(events.filter(event => (event._id || event.id) !== id));
@@ -251,7 +298,10 @@ function App() {
         try {
             const response = await fetch('http://localhost:5000/api/events/cancel', {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                },
                 body: JSON.stringify({
                     eventId: booking.eventId,
                     ticketQuantity: booking.quantity,
@@ -323,6 +373,32 @@ function App() {
         }
     };
 
+    const handleUpdateProfile = async (updatedData) => {
+        // Assuming your backend will have an endpoint at /api/users/update-profile
+        try {
+            const response = await fetch('http://localhost:5000/api/users/update-profile', {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                },
+                body: JSON.stringify({ userId: currentUser?.id || currentUser?._id, ...updatedData })
+            });
+            if (response.ok) {
+                const updatedUser = await response.json();
+                setCurrentUser(updatedUser.user);
+                localStorage.setItem("user", JSON.stringify(updatedUser.user));
+                showToast("Profile updated successfully!");
+            } else {
+                const errorData = await response.json().catch(() => ({}));
+                showToast(`Failed to update: ${errorData.message || 'Server error'}`);
+            }
+        } catch (error) {
+            console.error("Profile update error:", error);
+            showToast("Connection error while updating profile.");
+        }
+    };
+
     return(
         <Router>
             <div className='app-container'>
@@ -349,7 +425,7 @@ function App() {
                     />
                     <Route
                         path='/my-tickets'
-                        element={<ProtectedRoute isLoggedIn={isLoggedIn}><MyTickets bookedTickets={bookedTickets.filter(t => t.userId === currentUser?.id)} onCancelBooking={cancelBooking} /></ProtectedRoute>}
+                        element={<ProtectedRoute isLoggedIn={isLoggedIn}><MyTickets bookedTickets={bookedTickets.filter(t => String(t.userId) === String(currentUser?.id || currentUser?._id))} onCancelBooking={cancelBooking} /></ProtectedRoute>}
                     />
                      <Route 
                         path='/saved'
@@ -362,6 +438,20 @@ function App() {
                                 onDeleteEvent={deleteEvent}
                                 onClearEvents={clearAllFavourites}
                                 currentUser={currentUser}
+                            />
+                            </ProtectedRoute>
+                        }
+                     />
+                     <Route 
+                        path='/profile'
+                        element={
+                            <ProtectedRoute isLoggedIn={isLoggedIn}>
+                            <Profile
+                                currentUser={currentUser}
+                                onUpdateProfile={handleUpdateProfile}
+                                bookedTickets={bookedTickets.filter(t => String(t.userId) === String(currentUser?.id || currentUser?._id))}
+                                favourites={favourites}
+                                events={events}
                             />
                             </ProtectedRoute>
                         }

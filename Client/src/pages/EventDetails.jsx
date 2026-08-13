@@ -88,7 +88,7 @@ const EventDetails = ({events, onBookTickets, onShowToast, currentUser}) => {
     const handleConfirmPurchase = async () => {
         const currentBooking = {
             bookingId: Date.now(),
-            userId: currentUser.id,
+            userId: currentUser?.id || currentUser?._id,
             eventId: event._id || event.id,
             eventTitle: event.title,
             eventImage: event.image,
@@ -101,6 +101,7 @@ const EventDetails = ({events, onBookTickets, onShowToast, currentUser}) => {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
                 },
                 body: JSON.stringify({
                     eventId: event._id || event.id,
@@ -108,6 +109,11 @@ const EventDetails = ({events, onBookTickets, onShowToast, currentUser}) => {
                 }),
             });
             const data = await response.json();
+            
+            if (response.status === 401) {
+                alert("Your session has expired. Please log out and log in again.");
+                return;
+            }
             if(response.ok){
                 setIsPurchased(true); // Show the success state first
                 onBookTickets(currentBooking, data.event); // Send to App.jsx

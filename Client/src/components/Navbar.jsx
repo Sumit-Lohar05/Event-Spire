@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { Menu, X, User, ChevronDown, Ticket, Heart, LogOut } from 'lucide-react';
 import './Navbar.css';
 import { HashLink } from 'react-router-hash-link';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, NavLink, useNavigate, useLocation } from 'react-router-dom';
 
 // Custom hook to handle clicks outside a referenced element
 function useClickOutside(handler) {
@@ -21,8 +21,10 @@ function useClickOutside(handler) {
 
 function Navbar({onLoginClick, onSignupClick, isLoggedIn, onLogout, favourites, currentUser}) {
     const navigate = useNavigate();
+    const location = useLocation();
     const [isOpen, setIsOpen] = useState(false);
     const [isProfileOpen, setIsProfileOpen] = useState(false);
+    const [activeSection, setActiveSection] = useState('');
 
     const handleLinkClick = () => {
         setIsOpen(false);
@@ -42,6 +44,35 @@ function Navbar({onLoginClick, onSignupClick, isLoggedIn, onLogout, favourites, 
         setIsProfileOpen(false);
     });
 
+    // Scroll spy for active navigation links
+    useEffect(() => {
+        if (location.pathname !== '/') {
+            setActiveSection('');
+            return;
+        }
+
+        const handleScroll = () => {
+            const sections = ['featured', 'categories', 'steps'];
+            let current = '';
+            
+            for (const section of sections) {
+                const element = document.getElementById(section);
+                if (element) {
+                    const rect = element.getBoundingClientRect();
+                    // Check if section is currently near the top of the viewport
+                    if (rect.top <= window.innerHeight / 3 && rect.bottom >= 150) {
+                        current = section;
+                    }
+                }
+            }
+            setActiveSection(current);
+        };
+
+        window.addEventListener('scroll', handleScroll);
+        handleScroll(); // Trigger immediately to set initial state
+        
+        return () => window.removeEventListener('scroll', handleScroll);
+    }, [location.pathname]);
 
     return (
       <nav className="navbar">
@@ -59,17 +90,22 @@ function Navbar({onLoginClick, onSignupClick, isLoggedIn, onLogout, favourites, 
             <li className="mobile-only close-menu" onClick={() => setIsOpen(false)}>
                 <X size={28} />
             </li>
-            <li><HashLink smooth to="/#featured" onClick={handleLinkClick}>Browse Events</HashLink></li>
-            <li><HashLink smooth to="/#categories" onClick={handleLinkClick}>Categories</HashLink></li>
-            <li><HashLink smooth to="/#steps" onClick={handleLinkClick}>How It Works</HashLink></li>
+            <li><HashLink smooth to="/#featured" className={location.pathname === '/' && activeSection === 'featured' ? 'active' : ''} onClick={handleLinkClick}>Browse Events</HashLink></li>
+            <li><HashLink smooth to="/#categories" className={location.pathname === '/' && activeSection === 'categories' ? 'active' : ''} onClick={handleLinkClick}>Categories</HashLink></li>
+            <li><HashLink smooth to="/#steps" className={location.pathname === '/' && activeSection === 'steps' ? 'active' : ''} onClick={handleLinkClick}>How It Works</HashLink></li>
             {isLoggedIn && (
               <>
-                <li><Link to="/my-tickets" onClick={handleLinkClick}>My Tickets</Link></li>
-                {/* <li><Link to="/saved" onClick={handleLinkClick}>Saved Events ({favourites.length})</Link></li> */}
+                <li className="mobile-only"><NavLink to="/profile" onClick={handleLinkClick}>My Profile</NavLink></li>
+                <li><NavLink to="/my-tickets" onClick={handleLinkClick}>My Tickets</NavLink></li>
+                {/* <li><NavLink to="/saved" onClick={handleLinkClick}>Saved Events ({favourites.length})</NavLink></li> */}
               </>
             )}
             <li>
-                <span className="nav-link-item" onClick={handleHostEventClick} style={{cursor: 'pointer'}}>
+                <span 
+                    className={`nav-link-item ${location.pathname === '/host-event' ? 'active' : ''}`} 
+                    onClick={handleHostEventClick} 
+                    style={{cursor: 'pointer'}}
+                >
                         Host Event
                 </span>
             </li>
@@ -88,9 +124,13 @@ function Navbar({onLoginClick, onSignupClick, isLoggedIn, onLogout, favourites, 
             /* Desktop Profile Menu */
             <div className="profile-menu-container" ref={profileMenuRef}>
                 <button className='btn-profile' onClick={() => setIsProfileOpen(!isProfileOpen)}>
-                    <div className="avatar-placeholder">
-                        <User size={18} />
-                    </div>
+                    {currentUser?.profilePicture ? (
+                        <img src={currentUser.profilePicture} alt="Profile" style={{ width: '24px', height: '24px', borderRadius: '50%', objectFit: 'cover' }} />
+                    ) : (
+                        <div className="avatar-placeholder">
+                            <User size={18} />
+                        </div>
+                    )}
                     <span>Account</span>
                     <ChevronDown size={14} className={isProfileOpen ? 'rotate' : ''} />
                 </button>
@@ -99,8 +139,10 @@ function Navbar({onLoginClick, onSignupClick, isLoggedIn, onLogout, favourites, 
                     <div className="profile-dropdown">
                         <div className="dropdown-header">
                             <p className='user-name'>Hi, {currentUser?.username || "Guest"}</p>
-                            <p className='user-email'>{currentUser?.email || ""}</p>
                         </div>
+                        <Link to="/profile" onClick={() => setIsProfileOpen(false)}>
+                            <User size={16} /><span>My Profile</span>
+                        </Link>
                         <Link to="/my-tickets" onClick={() => setIsProfileOpen(false)}>
                             <Ticket size={16} /><span>My Tickets</span>
                         </Link>
