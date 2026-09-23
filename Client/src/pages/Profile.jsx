@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { User, Edit2, Save, X, Link as LinkIcon, Instagram, Twitter, MapPin, Calendar, Upload } from 'lucide-react';
+import defaultProfile from '../assets/profile.jpg';
 import './Profile.css';
 
 function Profile({ currentUser, onUpdateProfile, bookedTickets, favourites, events }) {
@@ -89,17 +90,26 @@ function Profile({ currentUser, onUpdateProfile, bookedTickets, favourites, even
         </div>
     );
 
-    const avatarSrc = isEditing ? formData.profilePicture : currentUser?.profilePicture;
+    const getProfileImage = (value) => {
+        if (!value || !String(value).trim()) return defaultProfile;
+        return value;
+    };
+
+    const avatarSrc = isEditing ? getProfileImage(formData.profilePicture) : getProfileImage(currentUser?.profilePicture);
 
     return (
         <div className="profile-page-container">
             <div className="profile-header-card">
                 <div className="profile-avatar-container">
-                    {avatarSrc ? (
-                        <img src={avatarSrc} alt="Profile" className="profile-avatar-img" />
-                    ) : (
-                        <div className="profile-avatar-placeholder"><User size={50} /></div>
-                    )}
+                    <img
+                        src={avatarSrc}
+                        alt="Profile"
+                        className="profile-avatar-img"
+                        onError={(e) => {
+                            e.currentTarget.onerror = null;
+                            e.currentTarget.src = defaultProfile;
+                        }}
+                    />
                 </div>
                 
                 <div className="profile-header-info">

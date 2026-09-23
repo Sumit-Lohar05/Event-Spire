@@ -1,12 +1,14 @@
+import { Link } from 'react-router-dom';
 import "./Footer.css";
+
 function Footer(){
     return(
         <footer className="footer">
             <div className="footer-top">
                 <div className="footer-brand">
-                    <div className="logo">
+                    <Link to="/" className="logo" aria-label="Go to home page">
                         <img src="/src/assets/logo1.png" alt="EventSpire" />
-                    </div>
+                    </Link>
                     <p>Your ultimate platform for discovering amazing events and creating unforgettable experiences.</p>
                     <div className="social-links">
                         <a href="#" aria-label="Facebook">

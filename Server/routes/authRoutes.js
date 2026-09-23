@@ -5,15 +5,19 @@ const crypto = require('crypto');
 const nodemailer = require('nodemailer');
 const path = require('path');
 const User = require('../models/User');
+const { normalizeEmailPassword } = require('../utils/emailConfig');
 
 const router = express.Router();
+
+const emailUser = (process.env.EMAIL_USER || '').trim();
+const emailPassword = normalizeEmailPassword(process.env.EMAIL_PASS);
 
 // Create a Nodemailer transporter
 const transporter = nodemailer.createTransport({
     service: 'gmail',
     auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
+        user: emailUser,
+        pass: emailPassword
     }
 });
 
@@ -86,10 +90,13 @@ router.post('/register', async (req, res) => {
             console.log('Verification email sent');
             res.status(201).json({ message: 'User registered! Please check your email to verify.' });
         } catch (mailError) {
-            console.error('Mail Error:', mailError);
+            const mailMessage = mailError?.response || mailError?.message || 'Unknown mail error';
+            console.error('Mail Error:', mailMessage);
             // Delete the user if email fails so they can try again
             await User.deleteOne({ _id: newUser._id });
-            res.status(500).json({ message: 'Error sending verification email. Please try again.' });
+            res.status(500).json({
+                message: 'Verification email could not be sent. Check the Gmail app password in the server .env file.'
+            });
         }
     } catch (error) {
         res.status(500).json({ message: error.message });

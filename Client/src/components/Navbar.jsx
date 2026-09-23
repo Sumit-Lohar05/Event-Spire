@@ -3,6 +3,7 @@ import { Menu, X, User, ChevronDown, Ticket, Heart, LogOut } from 'lucide-react'
 import './Navbar.css';
 import { HashLink } from 'react-router-hash-link';
 import { Link, NavLink, useNavigate, useLocation } from 'react-router-dom';
+import defaultProfile from '../assets/profile.jpg';
 
 // Custom hook to handle clicks outside a referenced element
 function useClickOutside(handler) {
@@ -25,6 +26,7 @@ function Navbar({onLoginClick, onSignupClick, isLoggedIn, onLogout, favourites, 
     const [isOpen, setIsOpen] = useState(false);
     const [isProfileOpen, setIsProfileOpen] = useState(false);
     const [activeSection, setActiveSection] = useState('');
+    const profileImage = currentUser?.profilePicture && String(currentUser.profilePicture).trim() ? currentUser.profilePicture : defaultProfile;
 
     const handleLinkClick = () => {
         setIsOpen(false);
@@ -76,9 +78,9 @@ function Navbar({onLoginClick, onSignupClick, isLoggedIn, onLogout, favourites, 
 
     return (
       <nav className="navbar">
-        <div className="logo">
+        <Link to="/" className="logo" aria-label="Go to home page">
           <img src="/src/assets/logo1.png" alt="EventSpire" />
-        </div>
+        </Link>
 
         <div className="menu-icon" onClick={() => setIsOpen(true)}>
           <Menu size={28}/>
@@ -124,13 +126,15 @@ function Navbar({onLoginClick, onSignupClick, isLoggedIn, onLogout, favourites, 
             /* Desktop Profile Menu */
             <div className="profile-menu-container" ref={profileMenuRef}>
                 <button className='btn-profile' onClick={() => setIsProfileOpen(!isProfileOpen)}>
-                    {currentUser?.profilePicture ? (
-                        <img src={currentUser.profilePicture} alt="Profile" style={{ width: '24px', height: '24px', borderRadius: '50%', objectFit: 'cover' }} />
-                    ) : (
-                        <div className="avatar-placeholder">
-                            <User size={18} />
-                        </div>
-                    )}
+                    <img
+                        src={profileImage}
+                        alt="Profile"
+                        onError={(e) => {
+                            e.currentTarget.onerror = null;
+                            e.currentTarget.src = defaultProfile;
+                        }}
+                        style={{ width: '24px', height: '24px', borderRadius: '50%', objectFit: 'cover' }}
+                    />
                     <span>Account</span>
                     <ChevronDown size={14} className={isProfileOpen ? 'rotate' : ''} />
                 </button>
