@@ -6,8 +6,24 @@ const nodemailer = require('nodemailer');
 const path = require('path');
 const User = require('../models/User');
 const { normalizeEmailPassword } = require('../utils/emailConfig');
+const { normalizeEmail, validateRegistration } = require('../utils/authValidation');
+const authMiddleware = require('../middleware/authMiddleware');
+const {
+    loginLimiter,
+    registrationLimiter,
+    verificationLimiter,
+    passwordResetRequestLimiter,
+    passwordResetLimiter
+} = require('../middleware/rateLimit');
 
 const router = express.Router();
+const verificationTokenLifetimeMs = 24 * 60 * 60 * 1000;
+const passwordResetTokenLifetimeMs = 60 * 60 * 1000;
+
+const hashVerificationToken = (token) => crypto
+    .createHash('sha256')
+    .update(token)
+    .digest('hex');
 
 const emailUser = (process.env.EMAIL_USER || '').trim();
 const emailPassword = normalizeEmailPassword(process.env.EMAIL_PASS);
@@ -22,9 +38,13 @@ const transporter = nodemailer.createTransport({
 });
 
 // SignUp Route
-router.post('/register', async (req, res) => {
+router.post('/register', registrationLimiter, async (req, res) => {
     try {
-        const { username, email, password } = req.body;
+        const validation = validateRegistration(req.body);
+        if (validation.error) {
+            return res.status(400).json({ message: validation.error });
+        }
+        const { username, email, password } = validation.value;
 
         // Check if email is already taken
         const existingEmail = await User.findOne({ email });
@@ -42,9 +62,16 @@ router.post('/register', async (req, res) => {
         const hashedPassword = await bcrypt.hash(password, salt);
 
         const verificationToken = crypto.randomBytes(32).toString('hex');
+        const verificationTokenExpiresAt = new Date(Date.now() + verificationTokenLifetimeMs);
         // Create and save user
 
-        const newUser = new User({ username, email, password: hashedPassword, verificationToken });
+        const newUser = new User({
+            username,
+            email,
+            password: hashedPassword,
+            verificationToken: hashVerificationToken(verificationToken),
+            verificationTokenExpiresAt
+        });
         await newUser.save();
 
         // Send verification email
@@ -81,7 +108,7 @@ router.post('/register', async (req, res) => {
             attachments: [{
                 filename: 'logo.png',
                 // We added an extra '..' because this file is now nested inside the 'routes' folder
-                path: path.join(__dirname, '..', '..', 'client', 'src', 'assets', 'logo1.png'), 
+                path: path.join(__dirname, '..', '..', 'Client', 'src', 'assets', 'logo1.png'),
                 cid: 'eventspirelogo'
             }]
         };
@@ -104,24 +131,26 @@ router.post('/register', async (req, res) => {
 });
 
 // Login Route
-router.post('/login', async (req, res) => {
+router.post('/login', loginLimiter, async (req, res) => {
     try {
-        const { email, password } = req.body;
+        const email = normalizeEmail(req.body.email);
+        const password = String(req.body.password || '');
+        const invalidCredentials = () => res.status(401).json({ message: 'Invalid email or password' });
+
+        if (!email || !password) {
+            return invalidCredentials();
+        }
 
         // Find user by email
         const user = await User.findOne({ email });
-        if(!user) return res.status(400).json({ message: 'User not found' });
+        if(!user) return invalidCredentials();
 
         // Check password
         const isMatch = await bcrypt.compare(password, user.password);
-        if(!isMatch) return res.status(400).json({ message: 'Invalid credentials' });
+        if(!isMatch) return invalidCredentials();
         
         // Check if email is verified
-        if (!user.isVerified) {
-        return res.status(403).json({ 
-            message: "Please verify your email before logging in." 
-        });
-    }
+        if (!user.isVerified) return invalidCredentials();
         // Create JWT token
         const token = jwt.sign( { id: user._id}, process.env.JWT_SECRET, { expiresIn: '3d' } );
 
@@ -142,19 +171,106 @@ router.post('/login', async (req, res) => {
     }
 });
 
-// Email Verification Route
-router.get('/verify/:token', async (req, res) => {
+router.post('/forgot-password', passwordResetRequestLimiter, async (req, res) => {
+    const responseMessage = 'If an account exists for that email, a password reset link will be sent.';
+
     try {
-        const user = await User.findOne({ verificationToken: req.params.token });
-        if(!user) {
-            return res.redirect('http://localhost:5173/?verified=false');
+        const email = normalizeEmail(req.body.email);
+        if (!email || email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            return res.json({ message: responseMessage });
+        }
+
+        const user = await User.findOne({ email });
+        if (user) {
+            const resetToken = crypto.randomBytes(32).toString('hex');
+            user.passwordResetToken = hashVerificationToken(resetToken);
+            user.passwordResetTokenExpiresAt = new Date(Date.now() + passwordResetTokenLifetimeMs);
+            await user.save();
+
+            const frontendURL = String(process.env.FRONTEND_URL || '').replace(/\/+$/, '');
+            const resetURL = `${frontendURL}/?resetToken=${encodeURIComponent(resetToken)}`;
+            try {
+                await transporter.sendMail({
+                    from: emailUser,
+                    to: email,
+                    subject: 'Reset your EventSpire password',
+                    text: `Use this link to reset your EventSpire password. It expires in one hour: ${resetURL}`,
+                    html: `<p>Use the link below to reset your EventSpire password. It expires in one hour.</p><p><a href="${resetURL}">Reset password</a></p>`
+                });
+            } catch (mailError) {
+                console.error('Password reset email could not be sent:', mailError?.message || mailError);
+            }
+        }
+
+        res.json({ message: responseMessage });
+    } catch (error) {
+        console.error('Password reset request failed:', error?.message || error);
+        res.json({ message: responseMessage });
+    }
+});
+
+router.post('/reset-password', passwordResetLimiter, async (req, res) => {
+    const token = String(req.body.token || '');
+    const password = String(req.body.password || '');
+
+    if (password.length < 8 || password.length > 128) {
+        return res.status(400).json({ message: 'Password must be between 8 and 128 characters.' });
+    }
+    if (!/^[a-f0-9]{64}$/i.test(token)) {
+        return res.status(400).json({ message: 'Invalid or expired password reset link.' });
+    }
+
+    try {
+        const user = await User.findOne({
+            passwordResetToken: hashVerificationToken(token),
+            passwordResetTokenExpiresAt: { $gt: new Date() }
+        });
+        if (!user) {
+            return res.status(400).json({ message: 'Invalid or expired password reset link.' });
+        }
+
+        user.password = await bcrypt.hash(password, 10);
+        user.passwordResetToken = null;
+        user.passwordResetTokenExpiresAt = null;
+        await user.save();
+        res.json({ message: 'Password updated. You can now sign in.' });
+    } catch (error) {
+        res.status(500).json({ message: 'Could not reset password. Please try again later.' });
+    }
+});
+
+router.get('/me', authMiddleware, async (req, res) => {
+    try {
+        const user = await User.findById(req.user.id)
+            .select('-password -verificationToken -verificationTokenExpiresAt -passwordResetToken -passwordResetTokenExpiresAt');
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+        res.json({ user });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+});
+
+// Email Verification Route
+router.get('/verify/:token', verificationLimiter, async (req, res) => {
+    try {
+        const hashedToken = hashVerificationToken(req.params.token);
+        const user = await User.findOne({
+            verificationToken: hashedToken,
+            verificationTokenExpiresAt: { $gt: new Date() },
+            isVerified: false
+        });
+        if (!user) {
+            return res.redirect(`${process.env.FRONTEND_URL}/?verified=false`);
         }
         user.isVerified = true;
         user.verificationToken = null;
+        user.verificationTokenExpiresAt = null;
         await user.save();
-        res.redirect('http://localhost:5173/?verified=true');
+        res.redirect(`${process.env.FRONTEND_URL}/?verified=true`);
     } catch (error) {
-        res.status(500).redirect('http://localhost:5173/?verified=error');
+        res.status(500).redirect(`${process.env.FRONTEND_URL}/?verified=error`);
     }
 });
 

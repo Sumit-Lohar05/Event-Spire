@@ -35,7 +35,7 @@ export const eventsData = [
   {
     id: "tech-summit-2026",
     image: "https://images.unsplash.com/photo-1505373877841-8d25f7d46678?q=80&w=800&auto=format&fit=crop",
-    date: { month: "May", day: "12" },
+    date: { month: "May", day: "12", year: "2026" },
     title: "Tech Summit 2026",
     location: "San Francisco, CA",
     price: "$150",

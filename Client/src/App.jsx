@@ -14,8 +14,10 @@ import HostEventPage from './components/HostEvent/HostEventPage';
 import MyTickets from './components/Tickets/MyTickets';
 import SavedEvents from './pages/SavedEvents';
 import Profile from './pages/Profile';
+import { getEventDate, getEventPrice, isEventExpired } from './utils/eventFormat';
+import { ApiError, apiFetch } from './utils/api';
 
-const Home = ({ events, loading, isLoggedIn, onLoginClick, onDeleteEvent, favourites, onToggleFavorite, currentUser }) => {
+const Home = ({ events, loading, error, onRetry, isLoggedIn, onLoginClick, onDeleteEvent, favourites, onToggleFavorite, currentUser }) => {
     const [searchQuery, setSearchQuery] = useState("");
     const [locationQuery, setLocationQuery] = useState("");
     const [selectedCategory, setSelectedCategory] = useState("All");
@@ -42,7 +44,9 @@ const Home = ({ events, loading, isLoggedIn, onLoginClick, onDeleteEvent, favour
         }
     };
 
-    const filteredEvents = events.filter(event =>{
+    const filteredEvents = events.filter(event => {
+        if (isEventExpired(event)) return false;
+
         const matchSearch = 
             event.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
             event.category.toLowerCase().includes(searchQuery.toLowerCase());
@@ -52,15 +56,14 @@ const Home = ({ events, loading, isLoggedIn, onLoginClick, onDeleteEvent, favour
         // Date filter
         let matchDate = true;
         if (selectedDate) {
-            const eventDate = new Date(`${event.date.month} ${event.date.day}, ${event.date.year}`);
+            const eventDate = getEventDate(event.date);
             const filterDate = new Date(selectedDate);
-            matchDate = eventDate.toDateString() === filterDate.toDateString();
+            matchDate = eventDate?.toDateString() === filterDate.toDateString();
         }
 
         // Price filter
         let matchPrice = true;
-        const price = typeof event.price === 'number' ? event.price : 
-                      (event.price === "Free" || !event.price ? 0 : parseInt(event.price.replace(/[^0-9.]/g, '')) || 0);
+        const price = getEventPrice(event.price);
         
         if (priceFilter === "Free") {
             matchPrice = price === 0;
@@ -97,6 +100,8 @@ const Home = ({ events, loading, isLoggedIn, onLoginClick, onDeleteEvent, favour
             <FeaturedEvents 
                 events={filteredEvents}
             loading={loading}
+                error={error}
+                onRetry={onRetry}
                 onDeleteEvent={onDeleteEvent}
                 favourites={favourites}
                 onToggleFavorite={onToggleFavorite}
@@ -116,38 +121,95 @@ function App() {
 
     const [events, setEvents] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [eventsError, setEventsError] = useState('');
+
+    const loadEvents = async () => {
+        setLoading(true);
+        setEventsError('');
+        try {
+            const data = await apiFetch('/api/events');
+            setEvents(Array.isArray(data) ? data : []);
+        } catch (error) {
+            console.error("Error fetching events:", error);
+            setEventsError('Events could not be loaded. Please try again.');
+        } finally {
+            setLoading(false);
+        }
+    };
 
     useEffect(() => {
-        const fetchEvents = async () => {
-            try {
-                const response = await fetch('http://localhost:5000/api/events');
-                const data = await response.json();
-                setEvents(data);
-            } catch (error){
-                console.error("Error fetching events:", error);
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchEvents();
+        loadEvents();
     }, []);
 
     const [bookedTickets, setBookedTickets] = useState(() => {
         const saved = localStorage.getItem("bookedTickets");
         return saved ? JSON.parse(saved) : [];
     });
-    const [isAuthOpen, setIsAuthOpen] = useState(false);
+    const [isAuthOpen, setIsAuthOpen] = useState(() => new URLSearchParams(window.location.search).has('resetToken'));
     const [authMode, setAuthMode] = useState(true);
-    const [isLoggedIn, setIsLoggedIn] = useState(() => {
-        return localStorage.getItem("isLoggedIn") === "true";
-    });
+    const [isLoggedIn, setIsLoggedIn] = useState(false);
+    const [authReady, setAuthReady] = useState(false);
     const [currentUser, setCurrentUser] = useState(() => {
         const savedUser = localStorage.getItem("user");
         return savedUser && savedUser !== "undefined" ? JSON.parse(savedUser) : null;
     });
 
+    const clearAuthState = () => {
+        setIsLoggedIn(false);
+        setCurrentUser(null);
+        setBookedTickets([]);
+        setFavourites([]);
+        localStorage.removeItem("isLoggedIn");
+        localStorage.removeItem("token");
+        localStorage.removeItem("user");
+        localStorage.removeItem("bookedTickets");
+        localStorage.removeItem("favourites");
+    };
+
+    useEffect(() => {
+        const token = localStorage.getItem('token');
+        if (!token) {
+            clearAuthState();
+            setAuthReady(true);
+            return;
+        }
+
+        apiFetch('/api/auth/me')
+            .then(({ user }) => {
+                setCurrentUser(user);
+                setIsLoggedIn(true);
+                setBookedTickets(user.bookedTickets || []);
+                setFavourites(user.favourites || []);
+                localStorage.setItem('isLoggedIn', 'true');
+                localStorage.setItem('user', JSON.stringify(user));
+            })
+            .catch(error => {
+                console.error('Session validation failed:', error);
+                clearAuthState();
+            })
+            .finally(() => setAuthReady(true));
+    }, []);
+
+    useEffect(() => {
+        let invalidationInProgress = false;
+        const handleUnauthorized = () => {
+            if (invalidationInProgress) return;
+            invalidationInProgress = true;
+            clearAuthState();
+            window.setTimeout(() => {
+                invalidationInProgress = false;
+            }, 0);
+        };
+
+        window.addEventListener('auth:unauthorized', handleUnauthorized);
+        return () => window.removeEventListener('auth:unauthorized', handleUnauthorized);
+    }, []);
+
     // Protected Route Component(checks if user is logged in)
-    const ProtectedRoute = ({ isLoggedIn, children }) => {
+    const ProtectedRoute = ({ isLoggedIn, authReady, children }) => {
+        if (!authReady) {
+            return <div className="loading">Checking your session...</div>;
+        }
         if (!isLoggedIn) {
             return <Navigate to="/" replace />;
         }
@@ -187,14 +249,7 @@ function App() {
     };
 
     const handleLogout = () => {
-        setIsLoggedIn(false);
-        setCurrentUser(null);
-        setBookedTickets([]);
-        localStorage.removeItem("isLoggedIn");
-        localStorage.removeItem("token");
-        localStorage.removeItem("user");
-        localStorage.removeItem("bookedTickets");
-        localStorage.removeItem("favourites");
+        clearAuthState();
         showToast("Logged out successfully!");
     };
 
@@ -207,48 +262,50 @@ function App() {
 
     const addEvent = async (newEvent) => {
         try {
-            const response = await fetch('http://localhost:5000/api/events', {
+            const savedEvent = await apiFetch('/api/events', {
                 method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${localStorage.getItem('token')}`
-                },
                 body: JSON.stringify({
                     ...newEvent,
                     id: `event-${Date.now()}`,
                     isUserEvent: true
                 })
             });
-            if(response.ok){
-                const savedEvent = await response.json();
-                setEvents([savedEvent, ...events]);
-                showToast("Event Published Successfully!");
-            } else {
-                showToast("Failed to publish event. Please try again.");
-            }
+            setEvents(prevEvents => [savedEvent, ...prevEvents]);
+            showToast("Event Published Successfully!");
+            return savedEvent;
         } catch (error) {
             console.error("Error adding event:", error);
             showToast("Server error. Try again later.");
+        }
+        return null;
+    };
+
+    const updateEvent = async (eventId, updatedEvent) => {
+        try {
+            const data = await apiFetch(`/api/events/${eventId}`, {
+                method: 'PATCH',
+                body: JSON.stringify(updatedEvent)
+            });
+            setEvents(prevEvents => prevEvents.map(event =>
+                String(event._id || event.id) === String(data._id || data.id) ? data : event
+            ));
+            showToast("Event updated successfully!");
+            return data;
+        } catch (error) {
+            console.error("Error updating event:", error);
+            showToast("Server error. Try again later.");
+            return null;
         }
     };
 
     const deleteEvent = async (id) => {
         if(window.confirm("Are you sure you want to delete this event?")){
             try {
-                const response = await fetch(`http://localhost:5000/api/events/${id}`, {
+                await apiFetch(`/api/events/${id}`, {
                     method: 'DELETE',
-                    headers: { 
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${localStorage.getItem('token')}`
-                    },
-                    body: JSON.stringify({ userId: currentUser?.id || currentUser?._id })
                 });
-                if(response.ok){
-                    setEvents(events.filter(event => (event._id || event.id) !== id));
-                    showToast("Event deleted successfully!");
-                } else {
-                    showToast("Could not delete event. Please try again.");
-                }
+                setEvents(prevEvents => prevEvents.filter(event => (event._id || event.id) !== id));
+                showToast("Event deleted successfully!");
             } catch (error){
                 console.error("Error deleting event:", error);
                 showToast("Connection error. Try again later.");
@@ -257,34 +314,16 @@ function App() {
     };
 
     // Function to handle booking
-    const handleBookTickets = async (bookingInfo, updatedEvent) => {
-        const personalizedBooking = {
-            ...bookingInfo,
-            userId: currentUser?.id || currentUser?._id
-        };
-        if(isLoggedIn){
-            try { 
-                const response = await fetch('http://localhost:5000/api/users/book-ticket', {
-                    method: 'POST',
-                    headers: { 
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${localStorage.getItem('token')}`
-                    },
-                    body: JSON.stringify({
-                        userId: personalizedBooking.userId,
-                        booking: personalizedBooking
-                    })
-                });
-                if(response.ok){
-                    setBookedTickets(prev => [...prev, personalizedBooking]);
-                    setEvents(prevEvents => prevEvents.map(event => 
-                        (event._id === updatedEvent._id || event.id === updatedEvent.id) ? updatedEvent : event
-                    ));
-                } 
-            } catch (error){
-                console.error("Booking synced failed:", error);
-                showToast("Failed to save ticket to your account.");
-            }
+    const handleBookTickets = (booking, updatedEvent) => {
+        if (isLoggedIn && booking && updatedEvent) {
+            const eventIds = new Set([booking.eventId, updatedEvent.id, updatedEvent._id].filter(Boolean).map(String));
+            setBookedTickets(prev => [
+                ...prev.filter(ticket => !eventIds.has(String(ticket.eventId))),
+                booking
+            ]);
+            setEvents(prevEvents => prevEvents.map(event =>
+                (event._id === updatedEvent._id || event.id === updatedEvent.id) ? updatedEvent : event
+            ));
         }
     };
 
@@ -296,30 +335,21 @@ function App() {
             return;
         }
         try {
-            const response = await fetch('http://localhost:5000/api/events/cancel', {
+            const data = await apiFetch('/api/events/cancel', {
                 method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${localStorage.getItem('token')}`
-                },
                 body: JSON.stringify({
                     eventId: booking.eventId,
                     ticketQuantity: booking.quantity,
-                    userId: currentUser?.id || currentUser?._id,
                     bookingId: booking.bookingId
                 }),
             });
-            if(response.ok){
-                const data = await response.json();
-                setBookedTickets(prev => prev.filter(t => t.bookingId !== booking.bookingId));
-                setEvents(prevEvents => prevEvents.map(event => {
-                    const eventId = String(event._id || event.id);
-                    const updatedId = String(data.event._id || data.event.id);
-                    
-                    return eventId === updatedId ? data.event : event;
-                }));
-                showToast("Booking cancelled successfully!");
-            }
+            setBookedTickets(prev => prev.filter(t => t.bookingId !== booking.bookingId));
+            setEvents(prevEvents => prevEvents.map(event => {
+                const eventId = String(event._id || event.id);
+                const updatedId = String(data.event._id || data.event.id);
+                return eventId === updatedId ? data.event : event;
+            }));
+            showToast("Booking cancelled successfully!");
         } catch (error){
             console.error("Cancellation error:", error);
             showToast("Failed to cancel booking on server. Try again later.");
@@ -345,30 +375,35 @@ function App() {
 
         if(isLoggedIn && currentUser){
             try {
-                const response = await fetch('http://localhost:5000/api/users/update-favourites',{
+                await apiFetch('/api/users/update-favourites', {
                     method: 'PATCH',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${localStorage.getItem("token")}`
-                    },
-                    body: JSON.stringify({
-                        userId: currentUser.id || currentUser._id,
-                        favourites: updatedFavourites
-                    })
+                    body: JSON.stringify({ favourites: updatedFavourites })
                 });
-                if(!response.ok){
-                    throw new Error("Failed to sync favourites");
-                }      
             } catch(error) {
                 console.error("Database sync failed:", error);
+                setFavourites(favourites);
+                if (error instanceof ApiError && error.status === 401) clearAuthState();
                 showToast("Could not save favourite to account");
             }
         }
     };
 
-    const clearAllFavourites = () => {
+    const clearAllFavourites = async () => {
         if(window.confirm("Are you sure you want to clear all saved events?")){
+            const previousFavourites = favourites;
             setFavourites([]);
+            if (isLoggedIn) {
+                try {
+                    await apiFetch('/api/users/update-favourites', {
+                        method: 'PATCH',
+                        body: JSON.stringify({ favourites: [] })
+                    });
+                } catch {
+                    setFavourites(previousFavourites);
+                    showToast("Could not clear saved events from your account.");
+                    return;
+                }
+            }
             showToast("All saved events cleared!");
         }
     };
@@ -376,23 +411,13 @@ function App() {
     const handleUpdateProfile = async (updatedData) => {
         // Assuming your backend will have an endpoint at /api/users/update-profile
         try {
-            const response = await fetch('http://localhost:5000/api/users/update-profile', {
+            const updatedUser = await apiFetch('/api/users/update-profile', {
                 method: 'PATCH',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${localStorage.getItem('token')}`
-                },
-                body: JSON.stringify({ userId: currentUser?.id || currentUser?._id, ...updatedData })
+                body: JSON.stringify(updatedData)
             });
-            if (response.ok) {
-                const updatedUser = await response.json();
-                setCurrentUser(updatedUser.user);
-                localStorage.setItem("user", JSON.stringify(updatedUser.user));
-                showToast("Profile updated successfully!");
-            } else {
-                const errorData = await response.json().catch(() => ({}));
-                showToast(`Failed to update: ${errorData.message || 'Server error'}`);
-            }
+            setCurrentUser(updatedUser.user);
+            localStorage.setItem("user", JSON.stringify(updatedUser.user));
+            showToast("Profile updated successfully!");
         } catch (error) {
             console.error("Profile update error:", error);
             showToast("Connection error while updating profile.");
@@ -411,26 +436,26 @@ function App() {
                     favourites={favourites}
                     currentUser={currentUser}
                 />
-                <Auth isOpen={isAuthOpen} onClose={() => setIsAuthOpen(false)} initialMode={authMode} onAuthSuccess={handleAuthSuccess} />
+                <Auth key={`${isAuthOpen}-${authMode}`} isOpen={isAuthOpen} onClose={() => setIsAuthOpen(false)} initialMode={authMode} onAuthSuccess={handleAuthSuccess} />
                 <Routes>
                     <Route 
                         path='/' 
-                        element={<Home events={events} loading={loading} onDeleteEvent={deleteEvent} isLoggedIn={isLoggedIn} onLoginClick={handleLogin} favourites={favourites} onToggleFavorite={toggleFavourite} currentUser={currentUser} />} />
+                        element={<Home events={events} loading={loading} error={eventsError} onRetry={loadEvents} onDeleteEvent={deleteEvent} isLoggedIn={isLoggedIn} onLoginClick={handleLogin} favourites={favourites} onToggleFavorite={toggleFavourite} currentUser={currentUser} />} />
                     <Route 
                         path='/event/:id' 
-                        element={<EventDetails events={events} onBookTickets={handleBookTickets} onShowToast={showToast} currentUser={currentUser} />} />
+                        element={<EventDetails events={events} eventsLoading={loading} onBookTickets={handleBookTickets} onShowToast={showToast} isLoggedIn={isLoggedIn} onLoginClick={handleLogin} />} />
                     <Route
                         path='/host-event'
-                        element={<ProtectedRoute isLoggedIn={isLoggedIn}><HostEventPage onAddEvent={addEvent} currentUser={currentUser}/></ProtectedRoute>}
+                        element={<ProtectedRoute isLoggedIn={isLoggedIn} authReady={authReady}><HostEventPage onAddEvent={addEvent} onUpdateEvent={updateEvent} events={events} currentUser={currentUser}/></ProtectedRoute>}
                     />
                     <Route
                         path='/my-tickets'
-                        element={<ProtectedRoute isLoggedIn={isLoggedIn}><MyTickets bookedTickets={bookedTickets.filter(t => String(t.userId) === String(currentUser?.id || currentUser?._id))} onCancelBooking={cancelBooking} /></ProtectedRoute>}
+                        element={<ProtectedRoute isLoggedIn={isLoggedIn} authReady={authReady}><MyTickets bookedTickets={bookedTickets.filter(t => String(t.userId) === String(currentUser?.id || currentUser?._id))} onCancelBooking={cancelBooking} /></ProtectedRoute>}
                     />
                      <Route 
                         path='/saved'
                         element={
-                            <ProtectedRoute isLoggedIn={isLoggedIn}>
+                            <ProtectedRoute isLoggedIn={isLoggedIn} authReady={authReady}>
                             <SavedEvents
                                 events={events}
                                 favourites={favourites}
@@ -445,7 +470,7 @@ function App() {
                      <Route 
                         path='/profile'
                         element={
-                            <ProtectedRoute isLoggedIn={isLoggedIn}>
+                            <ProtectedRoute isLoggedIn={isLoggedIn} authReady={authReady}>
                             <Profile
                                 currentUser={currentUser}
                                 onUpdateProfile={handleUpdateProfile}

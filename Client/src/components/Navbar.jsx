@@ -49,7 +49,6 @@ function Navbar({onLoginClick, onSignupClick, isLoggedIn, onLogout, favourites, 
     // Scroll spy for active navigation links
     useEffect(() => {
         if (location.pathname !== '/') {
-            setActiveSection('');
             return;
         }
 

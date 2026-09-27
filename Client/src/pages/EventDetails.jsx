@@ -1,51 +1,71 @@
-import React, { useState, useEffect, use } from "react"
-import { Link, useParams } from "react-router-dom"
+import React, { useState, useEffect } from "react"
+import { useParams } from "react-router-dom"
 import { Share2, Check } from "lucide-react";
 import './EventDetails.css';
 import { HashLink } from "react-router-hash-link";
+import { getEventDate, getEventPrice, isEventExpired } from "../utils/eventFormat";
+import { ApiError, apiFetch } from "../utils/api";
 // import { eventsData } from "../data/event";
 
-const EventDetails = ({events, onBookTickets, onShowToast, currentUser}) => {
-    const {id} = useParams();
-    const event = events.find((e) => (e.id === id || e._id === id));
+const getTimeLeft = (event) => {
+    if(!event?.date) return {};
 
-    const calculateTimeLeft = () => {
-        // Safely fallback if event or date is undefined
-        if(!event?.date) return {};
+    const targetDate = getEventDate(event.date);
+    if (!targetDate) return {};
+    const difference = targetDate - new Date();
+    if (difference <= 0) return {};
 
-        const targetDate = new Date(`${event.date.month} ${event.date.day}, ${event.date.year}`);
-        const difference = targetDate - new Date();
-        let timeLeft = {};
-
-        if (difference > 0) {
-            timeLeft = {
-                days: Math.floor(difference / (1000 * 60 * 60 * 24)),
-                hours: Math.floor((difference / (1000 * 60 * 60)) % 24),
-                minutes: Math.floor((difference / 1000 / 60) % 60),
-                seconds: Math.floor((difference / 1000) % 60)
-            };
-        }
-        return timeLeft;
+    return {
+        days: Math.floor(difference / (1000 * 60 * 60 * 24)),
+        hours: Math.floor((difference / (1000 * 60 * 60)) % 24),
+        minutes: Math.floor((difference / 1000 / 60) % 60),
+        seconds: Math.floor((difference / 1000) % 60)
     };
+};
+
+const EventDetails = ({events, eventsLoading, onBookTickets, onShowToast, isLoggedIn, onLoginClick}) => {
+    const {id} = useParams();
+    const [loadedEvent, setLoadedEvent] = useState(null);
+    const event = loadedEvent || events.find((item) => (item.id === id || item._id === id));
+
+    useEffect(() => {
+        let cancelled = false;
+        const listedEvent = events.find((item) => item.id === id || item._id === id);
+        if (listedEvent || eventsLoading) {
+            setIsFetchingEvent(false);
+            return undefined;
+        }
+
+        const fetchEvent = async () => {
+            setIsFetchingEvent(true);
+            try {
+                const data = await apiFetch(`/api/events/${id}`);
+                if (!cancelled) setLoadedEvent(data);
+            } catch (error) {
+                console.error("Error fetching event:", error);
+                if (!cancelled) setLoadedEvent(null);
+            } finally {
+                if (!cancelled) setIsFetchingEvent(false);
+            }
+        };
+        fetchEvent();
+        return () => { cancelled = true; };
+    }, [events, eventsLoading, id]);
+
+    const [isFetchingEvent, setIsFetchingEvent] = useState(false);
 
     // Event Expiration Check
-    const isEventExpired = () => {
-        if(!event?.date) return false;
-        const targetDate = new Date(`${event.date.month} ${event.date.day} ${event.date.year}`);
-        return new Date() > targetDate;
-    };
-
     const [isCopied, setIsCopied] = useState(false);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isPurchased, setIsPurchased] = useState(false);
     const [ticketCount, setTicketCount] = useState(1);
 
-    const [timeLeft, setTimeLeft] = useState(calculateTimeLeft());
+    const [timeLeft, setTimeLeft] = useState(() => getTimeLeft(event));
 
     useEffect(() => {
         if (!event?.date) return;
         const timer = setInterval(() => {
-            setTimeLeft(calculateTimeLeft());
+            setTimeLeft(getTimeLeft(event));
         }, 1000);
 
         return () => clearInterval(timer);
@@ -55,7 +75,7 @@ const EventDetails = ({events, onBookTickets, onShowToast, currentUser}) => {
         window.scrollTo(0, 0);
     }, []);
 
-    if (!events || events.length === 0) {
+    if (eventsLoading || isFetchingEvent || (!event && events.length === 0)) {
         return <div className="loading">Loading event details...</div>;
     }
     if(!event){
@@ -69,7 +89,7 @@ const EventDetails = ({events, onBookTickets, onShowToast, currentUser}) => {
     }
 
     // Safety check for price parsing
-    const numericPrice = event && event.price ? parseInt(event.price.replace(/[^0-9.]/g, '')) || 0 : 0;
+    const numericPrice = getEventPrice(event.price);
     const totalPrice = numericPrice * ticketCount; 
     const remainingSpots = event.maxCapacity -  event.attendees;
     const isSoldOut = event.attendees >= event.maxCapacity;
@@ -82,53 +102,39 @@ const EventDetails = ({events, onBookTickets, onShowToast, currentUser}) => {
     };
     
     const handleCheckout = () => {
+        if (!isLoggedIn) {
+            onLoginClick?.();
+            return;
+        }
         setIsModalOpen(true);
     }
 
     const handleConfirmPurchase = async () => {
-        const currentBooking = {
-            bookingId: Date.now(),
-            userId: currentUser?.id || currentUser?._id,
-            eventId: event._id || event.id,
-            eventTitle: event.title,
-            eventImage: event.image,
-            eventDate: `${event.date.month} ${event.date.day} ${event.date.year}`,
-            quantity: ticketCount,
-            totalPaid: totalPrice.toFixed(2)
-        };
+        const bookingId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
         try {
-            const response = await fetch('http://localhost:5000/api/events/purchase', {
+            const data = await apiFetch('/api/events/purchase', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${localStorage.getItem('token')}`
-                },
                 body: JSON.stringify({
                     eventId: event._id || event.id,
-                    ticketQuantity: ticketCount
+                    ticketQuantity: ticketCount,
+                    bookingId
                 }),
             });
-            const data = await response.json();
-            
-            if (response.status === 401) {
-                alert("Your session has expired. Please log out and log in again.");
-                return;
-            }
-            if(response.ok){
-                setIsPurchased(true); // Show the success state first
-                onBookTickets(currentBooking, data.event); // Send to App.jsx
-                setTimeout(() => {
-                    setIsModalOpen(false);
-                    setIsPurchased(false);
-                    
-                    onShowToast(`Booking confirmed for ${event.title}!`);
-                }, 2000);
-            } else {
-                alert(data.message || 'Purchase failed. Please try again.');
-            }
+            setIsPurchased(true); // Show the success state first
+            onBookTickets(data.booking, data.event); // Send the server-created booking to App.jsx
+            setTimeout(() => {
+                setIsModalOpen(false);
+                setIsPurchased(false);
+                onShowToast(`Booking confirmed for ${event.title}!`);
+            }, 2000);
         } catch (error) {
             console.error('Error during purchase:', error);
-            alert('Server error. Please try again later.');
+            if (error instanceof ApiError && error.status === 401) {
+                setIsModalOpen(false);
+                onLoginClick?.();
+                return;
+            }
+            alert(error instanceof ApiError ? error.message : 'Server error. Please try again later.');
         }    
     };
 
@@ -137,7 +143,7 @@ const EventDetails = ({events, onBookTickets, onShowToast, currentUser}) => {
         setIsPurchased(false);
     };
 
-    const expired = isEventExpired();
+    const expired = isEventExpired(event);
 
     return(
         <div className="event-details-page">
@@ -199,8 +205,7 @@ const EventDetails = ({events, onBookTickets, onShowToast, currentUser}) => {
                         )}
                     </div>
                     <h2>About This Event</h2>
-                    <p>Experience an unforgettable night of music and energy. Join us for a world-class performance featuring top artists and an immersive atmosphere.
-                    </p>
+                    <p>{event.description || 'Event details will be announced by the organizer.'}</p>
                 </div>
                 <div className="ticket-card">
                     <h3>Ticket Summary</h3>
@@ -234,7 +239,7 @@ const EventDetails = ({events, onBookTickets, onShowToast, currentUser}) => {
                                         <div className="summary-details">
                                             <p><strong>Event: </strong>{event.title}</p>
                                             <p><strong>Tickets: </strong> {ticketCount}</p>
-                                            <p><strong>Total Price: </strong> ${totalPrice.toFixed(2)}</p>
+                                            <p><strong>Total Price: </strong> ₹{totalPrice.toFixed(2)}</p>
                                         </div>
                                         <div className="modal-actions">
                                             <button className="cancel-btn" onClick={handleCloseModal}>Cancel</button>

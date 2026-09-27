@@ -20,7 +20,7 @@ const MyTickets = ({bookedTickets, onCancelBooking}) => {
                                 <h3>{ticket.eventTitle}</h3>
                                 <p>{ticket.eventDate}</p>
                                 <p>Quantity: {ticket.quantity}</p>
-                                <p className="price-tag">Total: ${ticket.totalPaid}</p>
+                                <p className="price-tag">Total: ${Number(ticket.totalPaid).toFixed(2)}</p>
                                 <button className="cancel-button" onClick={() => onCancelBooking(ticket)}>
                                     <Trash size={14} />
                                     Cancel Booking

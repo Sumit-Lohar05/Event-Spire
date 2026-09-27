@@ -3,9 +3,10 @@ import EventCard from "../components/EventCard/EventCard";
 import './SavedEvents.css';
 import { Trash2 } from "lucide-react";
 import { useEffect } from "react";
+import { getEventId } from "../utils/eventFormat";
 
 const SavedEvents = ({ events, favourites, onToggleFavorite, onDeleteEvent, onClearEvents, currentUser }) => {
-    const savedList = events.filter(event => favourites.includes(event.id));
+    const savedList = events.filter(event => favourites.some(id => String(id) === getEventId(event)));
     
     useEffect(()=>{
         window.scrollTo(0, 0);
@@ -33,7 +34,7 @@ const SavedEvents = ({ events, favourites, onToggleFavorite, onDeleteEvent, onCl
                 <div className="saved-events-grid">
                     {savedList.map(event => (
                         <EventCard
-                            key={event.id}
+                            key={getEventId(event)}
                             {...event}
                             event={event}
                             currentUser={currentUser}

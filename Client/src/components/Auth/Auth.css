@@ -102,7 +102,11 @@ input:-webkit-autofill:focus {
     font-size: 0.9rem;
     text-align: center;
 }
+.auth-text-button,
 .toogle-auth{
+    background: none;
+    border: 0;
+    padding: 0;
     color: #6366f1;
     font-weight: 600;
     cursor: pointer;
@@ -112,6 +116,17 @@ input:-webkit-autofill:focus {
 .toogle-auth:hover{
     color: #818cf8;
     text-decoration: underline;
+}
+.forgot-password {
+    display: block;
+    margin: 0 0 18px auto;
+    font-size: 0.9rem;
+}
+.auth-notice {
+    color: #86efac;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin-bottom: 12px;
 }
 .input-error{
     border-color: #ef4444 !important;

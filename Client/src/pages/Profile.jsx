@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { startTransition, useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { User, Edit2, Save, X, Link as LinkIcon, Instagram, Twitter, MapPin, Calendar, Upload } from 'lucide-react';
 import defaultProfile from '../assets/profile.jpg';
@@ -23,13 +23,13 @@ function Profile({ currentUser, onUpdateProfile, bookedTickets, favourites, even
         // When the currentUser prop changes (i.e., after a profile update),
         // sync the local form state to match the new, authoritative data.
         if (currentUser) {
-            setFormData({
+            startTransition(() => setFormData({
                 bio: currentUser.bio || '',
                 profilePicture: currentUser.profilePicture || '',
                 twitter: currentUser.socialLinks?.twitter || '',
                 instagram: currentUser.socialLinks?.instagram || '',
                 website: currentUser.socialLinks?.website || ''
-            });
+            }));
         }
     }, [currentUser]);
 

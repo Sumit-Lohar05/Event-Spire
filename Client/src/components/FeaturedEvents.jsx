@@ -1,20 +1,19 @@
 import { useState, useMemo } from "react";
 import EventCard from "./EventCard/EventCard";
 import "./FeaturedEvents.css";
+import { getEventDate } from "../utils/eventFormat";
 
-function FeaturedEvents({events, loading, title, onDeleteEvent, favourites, onToggleFavorite, currentUser}) {
+function FeaturedEvents({events, loading, error, onRetry, title, onDeleteEvent, favourites, onToggleFavorite, currentUser}) {
     const [showAll, setShowAll] = useState(false);
 
     // Sort the events by date using useMemo to avoid unnecessary sorting on every render
     const sortedEvents = useMemo(() => {
         return [...events].sort((a, b) => {
-            if (!a.date || !b.date) return 0;
-
-            const dateA = new Date(`${a.date.month} ${a.date.day} ${a.date.year}`);
-            const dateB = new Date(`${b.date.month} ${b.date.day} ${b.date.year}`);
+            const dateA = getEventDate(a.date);
+            const dateB = getEventDate(b.date);
 
             // If date parsing fails, default to 0 (no move)
-            if (isNaN(dateA) || isNaN(dateB)) return 0;
+            if (!dateA || !dateB) return 0;
             return dateA - dateB;
         });
     }, [events]);
@@ -31,6 +30,11 @@ function FeaturedEvents({events, loading, title, onDeleteEvent, favourites, onTo
                 <div className="loading-spinner-container">
                     <div className="spinner"></div>
                     <p>Loading amazing events...</p>
+                </div>
+            ) : error ? (
+                <div className="no-results">
+                    <p>{error}</p>
+                    <button className="btn-view-all" onClick={onRetry}>Retry</button>
                 </div>
             ) : visibleEvents && visibleEvents.length > 0 ? (
                     visibleEvents.map((event)=>(

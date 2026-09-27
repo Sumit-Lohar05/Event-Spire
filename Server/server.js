@@ -3,14 +3,23 @@ const cors = require('cors');
 require('dotenv').config();
 
 const connectDB = require('./config/db');
+const { validateEnv } = require('./config/env');
 const authRoutes = require('./routes/authRoutes');
 const eventRoutes = require('./routes/eventRoutes');
 const userRoutes = require('./routes/userRoutes');
 
 const app = express();
+const { allowedOrigins } = validateEnv();
 
 // Middleware
-app.use(cors());
+app.use(cors({
+    origin(origin, callback) {
+        if (!origin || allowedOrigins.includes(origin)) {
+            return callback(null, true);
+        }
+        return callback(new Error('Origin is not allowed by CORS'));
+    }
+}));
 app.use(express.json());
 
 // Connect to MongoDB

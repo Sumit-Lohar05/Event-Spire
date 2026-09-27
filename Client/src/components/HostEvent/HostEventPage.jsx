@@ -1,14 +1,17 @@
-import { useEffect, useState } from "react";
+import { startTransition, useEffect, useState } from "react";
 import './HostEventPage.css';
 import { Upload, Calendar, MapPin, Tag, IndianRupee, List, Users } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
-const HostEventPage = ({onAddEvent, currentUser}) => {
+const HostEventPage = ({onAddEvent, onUpdateEvent, events, currentUser}) => {
     useEffect(() => {
         window.scrollTo(0, 0);
     }, []);
 
     const navigate = useNavigate();
+    const location = useLocation();
+    const editId = new URLSearchParams(location.search).get('edit');
+    const existingEvent = events.find(event => String(event._id || event.id) === String(editId));
     const [preview, setPreview] = useState(null);
 
     // State to capture form data
@@ -20,7 +23,33 @@ const HostEventPage = ({onAddEvent, currentUser}) => {
         price: '',
         maxCapacity: '',
         imageUrl: '',
+        description: '',
+        startTime: '',
+        endTime: '',
     });
+
+    useEffect(() => {
+        if (!existingEvent) return;
+        const eventDate = existingEvent.date || {};
+        const toTimeInput = (value) => value ? new Date(value).toTimeString().slice(0, 5) : '';
+        startTransition(() => {
+            setFormData({
+                title: existingEvent.title || '',
+                date: eventDate.year && eventDate.month && eventDate.day
+                    ? `${eventDate.year}-${String(new Date(`${eventDate.month} 1, ${eventDate.year}`).getMonth() + 1).padStart(2, '0')}-${String(eventDate.day).padStart(2, '0')}`
+                    : '',
+                category: existingEvent.category || 'Music',
+                location: existingEvent.location || '',
+                price: String(existingEvent.price ?? 0).replace(/[^0-9.]/g, ''),
+                maxCapacity: String(existingEvent.maxCapacity ?? ''),
+                imageUrl: existingEvent.image || '',
+                description: existingEvent.description || '',
+                startTime: toTimeInput(eventDate.startAt),
+                endTime: toTimeInput(eventDate.endAt),
+            });
+            setPreview(existingEvent.image || null);
+        });
+    }, [existingEvent]);
 
     const handleImageChange = (e) => {
         const file = e.target.files[0];
@@ -39,7 +68,7 @@ const HostEventPage = ({onAddEvent, currentUser}) => {
         if(name === "imageUrl") setPreview(value);
     };
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
         if (!currentUser) {
             alert("Please log in again to host an event.");
@@ -48,16 +77,17 @@ const HostEventPage = ({onAddEvent, currentUser}) => {
         // Split the "YYYY-MM-DD" string to avoid timezone shifts
         const [year, month, day] = formData.date.split('-');
         const dateObj = new Date(year, month - 1, day);
+        const makeDateTime = (time) => time ? `${formData.date}T${time}:00` : undefined;
 
         const newEvent = {
-            id: Date.now().toString(),
-            creatorId: currentUser.id || currentUser._id,
-            isUserEvent: true,
+            ...(editId ? {} : { id: Date.now().toString() }),
             image: preview || "https://images.unsplash.com/photo-1501281668745-f7f57925c3b4",
             date: {
                 month: dateObj.toLocaleString('default', { month: 'short' }),
                 day: day, 
-                year: year
+                year: year,
+                startAt: makeDateTime(formData.startTime),
+                endAt: makeDateTime(formData.endTime)
             },
             title: formData.title,
             location: formData.location,
@@ -65,10 +95,12 @@ const HostEventPage = ({onAddEvent, currentUser}) => {
             attendees: 0,
             maxCapacity: parseInt(formData.maxCapacity) || 1000,
             category: formData.category,
-            description: "New event created by organizer"
+            description: formData.description.trim()
         };
-        onAddEvent(newEvent);
-        navigate("/");
+        const savedEvent = editId
+            ? await onUpdateEvent(editId, newEvent)
+            : await onAddEvent(newEvent);
+        if (savedEvent) navigate("/");
     }
 
     const handleClearImage = (e) => {
@@ -83,7 +115,7 @@ const HostEventPage = ({onAddEvent, currentUser}) => {
     return(
         <div className="host-event-container">
             <div className="host-card">
-                <h1>Create Your Event</h1>
+                <h1>{editId ? 'Edit Your Event' : 'Create Your Event'}</h1>
                 <p>Share your experience with the EventSpire community.</p>
 
                 <form className="host-form" onSubmit={handleSubmit}>
@@ -121,15 +153,23 @@ const HostEventPage = ({onAddEvent, currentUser}) => {
                     <div className="input-row">
                         <div className="input-field">
                             <label><Tag size={16} />Event Title</label>
-                            <input name="title" type="text" placeholder="Enter event title" onChange={handleChange} required />
+                            <input name="title" type="text" placeholder="Enter event title" value={formData.title} onChange={handleChange} required />
                         </div>
                         <div className="input-field">
                             <label><Calendar size={16} />Date</label>
-                            <input name="date" type="date" onChange={handleChange} required />
+                            <input name="date" type="date" value={formData.date} onChange={handleChange} required />
+                        </div>
+                        <div className="input-field">
+                            <label>Start Time</label>
+                            <input name="startTime" type="time" value={formData.startTime} onChange={handleChange} />
+                        </div>
+                        <div className="input-field">
+                            <label>End Time</label>
+                            <input name="endTime" type="time" value={formData.endTime} onChange={handleChange} />
                         </div>
                         <div className="input-field">
                             <label><List size={16} />Category</label>
-                            <select name="category" onChange={handleChange}>
+                            <select name="category" value={formData.category} onChange={handleChange}>
                                 <option>Music</option>
                                 <option>Arts</option>
                                 <option>Sports</option>
@@ -144,18 +184,22 @@ const HostEventPage = ({onAddEvent, currentUser}) => {
                     <div className="input-row">
                         <div className="input-field">
                             <label><MapPin size={16} />Location</label>
-                            <input name="location" type="text" placeholder="City or Venue" onChange={handleChange} required />
+                            <input name="location" type="text" placeholder="City or Venue" value={formData.location} onChange={handleChange} required />
                         </div>
                         <div className="input-field">
                             <label><IndianRupee size={16} />Ticket Price</label>
-                            <input name="price" type="number" placeholder="0.00" min={0} onChange={handleChange} required />
+                            <input name="price" type="number" placeholder="0.00" min={0} value={formData.price} onChange={handleChange} required />
                         </div>
                         <div className="input-field">
                             <label><Users size={16} />Max Capacity</label>
-                            <input name="maxCapacity" type="number" placeholder="e.g. 50" min={1} onChange={handleChange} required />
+                            <input name="maxCapacity" type="number" placeholder="e.g. 50" min={1} value={formData.maxCapacity} onChange={handleChange} required />
                         </div>
                     </div>
-                    <button type="submit" className="btn-submit-event">Publish Event</button>
+                    <div className="input-field">
+                        <label>Event Description</label>
+                        <textarea name="description" value={formData.description} onChange={handleChange} rows="4" required />
+                    </div>
+                    <button type="submit" className="btn-submit-event">{editId ? 'Save Changes' : 'Publish Event'}</button>
                 </form>
             </div>
         </div>
